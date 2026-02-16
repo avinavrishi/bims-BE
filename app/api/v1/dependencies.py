@@ -1,19 +1,16 @@
 """
 API Dependencies
 """
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.user import User
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+from app.models.user import User, UserStatus, UserRole
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    authorization: str = Header(..., alias="Authorization"),
+    db: Session = Depends(get_db),
 ) -> User:
     """Dependency to get current authenticated user"""
     credentials_exception = HTTPException(
@@ -22,11 +19,18 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    # Expect header in form "Bearer <token>"
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise credentials_exception
+
+    token = parts[1]
+
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
     
-    user_id: int = payload.get("user_id")
+    user_id: str = payload.get("user_id")
     if user_id is None:
         raise credentials_exception
     
@@ -34,7 +38,7 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     
-    if not user.is_active:
+    if user.status != UserStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
@@ -47,7 +51,7 @@ def get_current_brand_user(
     current_user: User = Depends(get_current_user)
 ) -> User:
     """Dependency to ensure user is a brand"""
-    if current_user.role.value != "brand":
+    if current_user.role != UserRole.BRAND:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This endpoint is only accessible to brands"
@@ -55,14 +59,14 @@ def get_current_brand_user(
     return current_user
 
 
-def get_current_influencer_user(
-    current_user: User = Depends(get_current_user)
+def get_current_brand_or_admin(
+    current_user: User = Depends(get_current_user),
 ) -> User:
-    """Dependency to ensure user is an influencer"""
-    if current_user.role.value != "influencer":
+    """Dependency to ensure user is a brand or admin"""
+    if current_user.role not in (UserRole.BRAND, UserRole.ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This endpoint is only accessible to influencers"
+            detail="This endpoint is only accessible to brands or admins",
         )
     return current_user
 

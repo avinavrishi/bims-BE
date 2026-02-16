@@ -3,11 +3,13 @@ Security utilities for authentication and authorization
 """
 from datetime import datetime, timedelta
 from typing import Optional
+import hashlib
+import secrets
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -40,4 +42,20 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def create_refresh_token() -> str:
+    """
+    Create a high-entropy refresh token (store only its hash in DB).
+    """
+    # ~43 chars urlsafe, plenty of entropy
+    return secrets.token_urlsafe(32)
+
+
+def hash_refresh_token(token: str) -> str:
+    """
+    Hash refresh token using a server-side secret salt.
+    """
+    material = f"{settings.SECRET_KEY}:{token}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
 

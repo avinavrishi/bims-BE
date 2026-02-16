@@ -1,16 +1,13 @@
 """
-API v1 Router - Main router that includes all endpoint routers
+API v1 Router - includes UML-relevant routers
 """
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, brands, influencers, campaigns, tasks, content
+from app.api.v1.endpoints import auth, campaigns, admin, profiles
 
 api_router = APIRouter()
 
-# Include all endpoint routers
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-api_router.include_router(brands.router, prefix="/brands", tags=["Brands"])
-api_router.include_router(influencers.router, prefix="/influencers", tags=["Influencers"])
 api_router.include_router(campaigns.router, prefix="/campaigns", tags=["Campaigns"])
-api_router.include_router(tasks.router, prefix="/tasks", tags=["Tasks"])
-api_router.include_router(content.router, prefix="/content", tags=["Content"])
+api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
+api_router.include_router(profiles.router, prefix="/profiles", tags=["Profiles"])
 

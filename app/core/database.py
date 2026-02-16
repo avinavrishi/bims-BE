@@ -41,14 +41,54 @@ def init_db():
     This is idempotent and safe to call multiple times
     """
     # Import all models to ensure they're registered with Base.metadata
-    from app.models import (
-        User, Brand, Influencer, Campaign, Task, 
-        Content, Payment, Milestone, Message,
-        DealApplication, Notification
+    from app.models import (  # noqa: F401
+        User,
+        Brand,
+        Campaign,
+        AuthSession,
+        RefreshToken,
+        LoginAudit,
+        Profile,
+        Creator,
+        SocialAccount,
+        CampaignParticipation,
+        ContentSubmission,
+        Payout,
+        LeaderboardEntry,
+        Platform,
+        CampaignPlatform,
     )
-    
+
     # Create all tables (only creates if they don't exist)
     Base.metadata.create_all(bind=engine)
+
+    # Bootstrap default admin user
+    from app.models.user import UserRole, UserStatus  # local import to avoid cycles
+    from app.core.security import get_password_hash
+
+    admin_email = "admin@gmail.com"
+    admin_password = "Admin@123"
+
+    db = SessionLocal()
+    try:
+        from app.models.user import User as UserModel
+
+        existing_admin = (
+            db.query(UserModel)
+            .filter(UserModel.email == admin_email)
+            .first()
+        )
+        if not existing_admin:
+            admin_user = UserModel(
+                email=admin_email,
+                password_hash=get_password_hash(admin_password),
+                role=UserRole.ADMIN,
+                status=UserStatus.ACTIVE,
+            )
+            db.add(admin_user)
+            db.commit()
+    finally:
+        db.close()
 
 
 def check_db_exists():

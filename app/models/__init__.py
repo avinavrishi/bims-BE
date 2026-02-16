@@ -1,28 +1,30 @@
 """
-Database Models
+Database Models - UML aligned
 """
 from app.models.user import User
 from app.models.brand import Brand
-from app.models.influencer import Influencer
 from app.models.campaign import Campaign
-from app.models.task import Task
-from app.models.content import Content
-from app.models.payment import Payment, Milestone
-from app.models.message import Message
-from app.models.deal_application import DealApplication
-from app.models.notification import Notification
+from app.models.auth_models import AuthSession, RefreshToken, LoginAudit
+from app.models.profile import Profile, Creator
+from app.models.social import SocialAccount, CampaignParticipation, ContentSubmission
+from app.models.economy import Payout, LeaderboardEntry
+from app.models.platform import Platform, CampaignPlatform
 
 __all__ = [
     "User",
     "Brand",
-    "Influencer",
     "Campaign",
-    "Task",
-    "Content",
-    "Payment",
-    "Milestone",
-    "Message",
-    "DealApplication",
-    "Notification",
+    "AuthSession",
+    "RefreshToken",
+    "LoginAudit",
+    "Profile",
+    "Creator",
+    "SocialAccount",
+    "CampaignParticipation",
+    "ContentSubmission",
+    "Payout",
+    "LeaderboardEntry",
+    "Platform",
+    "CampaignPlatform",
 ]
 

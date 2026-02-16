@@ -1,50 +1,63 @@
 """
-User Schemas
+User Schemas aligned with UML.
 """
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional
-from app.models.user import UserRole
+from app.models.user import UserRole, UserStatus
 
 
 class UserBase(BaseModel):
-    """Base user schema"""
     email: EmailStr
-    username: str
 
 
 class UserCreate(UserBase):
-    """Schema for user creation"""
+    """
+    Creator signup schema.
+    """
+
     password: str
-    role: UserRole
+    display_name: str
+
+
+class BrandUserCreate(UserBase):
+    """
+    Brand user signup schema (creates USER+BRAND).
+    """
+
+    password: str
+    company_name: str
+    industry: Optional[str] = None
+    website: Optional[str] = None
 
 
 class UserLogin(BaseModel):
-    """Schema for user login"""
     email: EmailStr
     password: str
 
 
 class UserResponse(UserBase):
-    """Schema for user response"""
-    id: int
+    id: str
     role: UserRole
-    is_active: bool
-    is_verified: bool
+    status: UserStatus
     created_at: datetime
-    
+    updated_at: datetime
+
     class Config:
         from_attributes = True
 
 
 class Token(BaseModel):
-    """Schema for authentication token"""
     access_token: str
     token_type: str = "bearer"
 
 
+class TokenPair(Token):
+    refresh_token: str
+    session_id: str
+
+
 class TokenData(BaseModel):
-    """Schema for token data"""
-    user_id: Optional[int] = None
+    user_id: Optional[str] = None
     email: Optional[str] = None
 

@@ -1,63 +1,59 @@
 """
-Campaign Schemas
+Campaign Schemas aligned with UML.
 """
 from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional, Dict, Any, List
-from app.models.campaign import CampaignStatus
+from datetime import datetime, date
+from typing import Optional
+from app.models.campaign import CampaignStatus, CampaignContentType
 
 
 class CampaignBase(BaseModel):
-    """Base campaign schema"""
     title: str
+    category: Optional[str] = None
+    content_type: CampaignContentType
     description: Optional[str] = None
-    brief: Optional[str] = None
-    budget: Optional[float] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    total_budget: float
+    rate_per_million_views: float
+    max_submissions_per_account: Optional[int] = None
+    max_earnings_per_creator: Optional[float] = None
+    max_earnings_per_post: Optional[float] = None
+    start_date: date
+    end_date: date
+    logo_drive_link: Optional[str] = None
+    guidelines_link: Optional[str] = None
+    discord_link: Optional[str] = None
 
 
 class CampaignCreate(CampaignBase):
-    """Schema for campaign creation"""
-    influencer_id: Optional[int] = None
-    required_deliverables: Optional[List[str]] = None
-    target_audience: Optional[Dict[str, Any]] = None
-    content_guidelines: Optional[str] = None
+    pass
 
 
 class CampaignUpdate(BaseModel):
-    """Schema for campaign update"""
     title: Optional[str] = None
+    category: Optional[str] = None
+    content_type: Optional[CampaignContentType] = None
     description: Optional[str] = None
-    brief: Optional[str] = None
+    total_budget: Optional[float] = None
+    used_budget: Optional[float] = None
+    rate_per_million_views: Optional[float] = None
+    max_submissions_per_account: Optional[int] = None
+    max_earnings_per_creator: Optional[float] = None
+    max_earnings_per_post: Optional[float] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
     status: Optional[CampaignStatus] = None
-    budget: Optional[float] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
-    influencer_id: Optional[int] = None
-    required_deliverables: Optional[List[str]] = None
-    target_audience: Optional[Dict[str, Any]] = None
-    content_guidelines: Optional[str] = None
-    extra_data: Optional[Dict[str, Any]] = None
+    logo_drive_link: Optional[str] = None
+    guidelines_link: Optional[str] = None
+    discord_link: Optional[str] = None
 
 
 class CampaignResponse(CampaignBase):
-    """Schema for campaign response"""
-    id: int
-    brand_id: int
-    influencer_id: Optional[int] = None
+    id: str
+    brand_id: str
     status: CampaignStatus
-    required_deliverables: List[str] = []
-    target_audience: Dict[str, Any] = {}
-    content_guidelines: Optional[str] = None
-    impressions: int = 0
-    clicks: int = 0
-    conversions: int = 0
-    engagement_rate: float = 0.0
-    extra_data: Dict[str, Any] = {}
+    used_budget: float
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 

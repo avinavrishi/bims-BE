@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    SESSION_EXPIRE_DAYS: int = 30
     
     # CORS Settings (can be comma-separated string or list)
     CORS_ORIGINS: Union[str, List[str]] = "http://localhost:3000,http://localhost:8000"
