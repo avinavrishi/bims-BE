@@ -19,12 +19,13 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.exe
 
 # Virtual Environment
 venv/
 env/
 ENV/
-bims-venv/
+my-venv/
 .venv/
 
 # IDE
