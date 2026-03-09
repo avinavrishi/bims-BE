@@ -34,3 +34,40 @@ class ProfileResponse(ProfileBase):
     class Config:
         from_attributes = True
 
+
+# ========== Creator type (face / faceless) and face creator form ==========
+
+
+class SetUsernameRequest(BaseModel):
+    """Set creator username (one-time on first login)."""
+    username: str
+
+
+class SetCreatorTypeRequest(BaseModel):
+    """Set creator type; if FACE, include face creator form fields."""
+    creator_type: str  # "FACE" | "FACELESS"
+    name: Optional[str] = None
+    category: Optional[str] = None
+    reel_price: Optional[float] = None
+    story_price: Optional[float] = None
+    reel_story_price: Optional[float] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+    language: Optional[str] = None
+
+
+class CreatorTypeResponse(BaseModel):
+    """Creator type and face creator details."""
+    creator_type: Optional[str] = None
+    name: Optional[str] = None
+    category: Optional[str] = None
+    reel_price: Optional[float] = None
+    story_price: Optional[float] = None
+    reel_story_price: Optional[float] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+    language: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+

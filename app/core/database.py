@@ -51,12 +51,14 @@ def init_db():
         Profile,
         Creator,
         SocialAccount,
+        SocialAccountVerification,
         CampaignParticipation,
         ContentSubmission,
         Payout,
         LeaderboardEntry,
         Platform,
         CampaignPlatform,
+        Notification,
     )
 
     # Create all tables (only creates if they don't exist)
@@ -87,6 +89,13 @@ def init_db():
             )
             db.add(admin_user)
             db.commit()
+
+        # Seed Platform table with Instagram, YouTube, TikTok (for campaign-platform mapping)
+        from app.models.platform import Platform as PlatformModel
+        for name in ("Instagram", "YouTube", "TikTok"):
+            if db.query(PlatformModel).filter(PlatformModel.name == name).first() is None:
+                db.add(PlatformModel(name=name))
+        db.commit()
     finally:
         db.close()
 

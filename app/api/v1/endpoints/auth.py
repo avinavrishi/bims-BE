@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.api.v1.dependencies import get_current_user
@@ -32,9 +32,9 @@ router = APIRouter()
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new creator."""
-    result = await db.execute(select(User).where(User.email == user_data.email))
+    result = db.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(
@@ -49,11 +49,13 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         status=UserStatus.ACTIVE,
     )
     db.add(new_user)
-    await db.flush()
+    db.flush()
 
+    # Placeholder display_name until creator sets username on first login
+    display_name = user_data.email.split("@")[0] if user_data.email else "Creator"
     profile = Profile(
         user_id=new_user.id,
-        display_name=user_data.display_name,
+        display_name=display_name,
     )
     creator = Creator(
         user_id=new_user.id,
@@ -64,8 +66,8 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     db.add(profile)
     db.add(creator)
 
-    await db.commit()
-    await db.refresh(new_user)
+    db.commit()
+    db.refresh(new_user)
     return new_user
 
 
@@ -74,9 +76,9 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def register_brand(user_data: BrandUserCreate, db: AsyncSession = Depends(get_db)):
+async def register_brand(user_data: BrandUserCreate, db: Session = Depends(get_db)):
     """Register a new brand user and associated Brand profile."""
-    result = await db.execute(select(User).where(User.email == user_data.email))
+    result = db.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(
@@ -92,7 +94,7 @@ async def register_brand(user_data: BrandUserCreate, db: AsyncSession = Depends(
         status=UserStatus.ACTIVE,
     )
     db.add(new_user)
-    await db.flush()
+    db.flush()
 
     brand = Brand(
         user_id=new_user.id,
@@ -102,15 +104,15 @@ async def register_brand(user_data: BrandUserCreate, db: AsyncSession = Depends(
     )
     db.add(brand)
 
-    await db.commit()
-    await db.refresh(new_user)
+    db.commit()
+    db.refresh(new_user)
     return new_user
 
 
 @router.post("/login", response_model=TokenPair)
-async def login(credentials: UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
+async def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db)):
     """Login by email/password and receive a JWT access token. Works for creators, brands, and admins."""
-    result = await db.execute(select(User).where(User.email == credentials.email))
+    result = db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(credentials.password, user.password_hash):
@@ -119,7 +121,7 @@ async def login(credentials: UserLogin, request: Request, db: AsyncSession = Dep
             status=LoginStatus.FAILED,
         )
         db.add(audit)
-        await db.commit()
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -147,7 +149,7 @@ async def login(credentials: UserLogin, request: Request, db: AsyncSession = Dep
         expires_at=session_expires_at,
     )
     db.add(session)
-    await db.flush()
+    db.flush()
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -177,7 +179,7 @@ async def login(credentials: UserLogin, request: Request, db: AsyncSession = Dep
         user_agent=user_agent,
     )
     db.add(audit)
-    await db.commit()
+    db.commit()
 
     return {
         "access_token": access_token,
@@ -192,20 +194,20 @@ class RefreshRequest(BaseModel):
 
 
 @router.post("/refresh", response_model=TokenPair)
-async def refresh_token(data: RefreshRequest, request: Request, db: AsyncSession = Depends(get_db)):
+async def refresh_token(data: RefreshRequest, request: Request, db: Session = Depends(get_db)):
     """Refresh token rotation: validate refresh token, revoke old, issue new pair."""
     token_hash = hash_refresh_token(data.refresh_token)
-    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    result = db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     rt = result.scalar_one_or_none()
     if not rt or rt.revoked or (rt.expires_at and rt.expires_at < datetime.utcnow()):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    result = await db.execute(select(AuthSession).where(AuthSession.id == rt.session_id))
+    result = db.execute(select(AuthSession).where(AuthSession.id == rt.session_id))
     session = result.scalar_one_or_none()
     if not session or not session.is_active or (session.expires_at and session.expires_at < datetime.utcnow()):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
 
-    result = await db.execute(select(User).where(User.id == session.user_id))
+    result = db.execute(select(User).where(User.id == session.user_id))
     user = result.scalar_one_or_none()
     if not user or user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not active")
@@ -233,7 +235,7 @@ async def refresh_token(data: RefreshRequest, request: Request, db: AsyncSession
         expires_at=refresh_expires_at,
     )
     db.add(new_rt)
-    await db.commit()
+    db.commit()
 
     return {
         "access_token": access_token,
@@ -247,7 +249,7 @@ async def refresh_token(data: RefreshRequest, request: Request, db: AsyncSession
 async def logout(
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Logout the current session (multi-device safe). Requires Authorization: Bearer <access_token>."""
     from app.core.security import decode_access_token
@@ -266,7 +268,7 @@ async def logout(
     if not session_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token missing session_id")
 
-    result = await db.execute(
+    result = db.execute(
         select(AuthSession).where(
             AuthSession.id == session_id,
             AuthSession.user_id == current_user.id,
@@ -275,10 +277,10 @@ async def logout(
     session = result.scalar_one_or_none()
     if session:
         session.is_active = False
-        await db.execute(
+        db.execute(
             update(RefreshToken).where(RefreshToken.session_id == session.id).values(revoked=True)
         )
-        await db.commit()
+        db.commit()
     return None
 
 

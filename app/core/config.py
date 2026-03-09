@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     SESSION_EXPIRE_DAYS: int = 30
     
+    # Social account bio verification (clipster-style)
+    SOCIAL_VERIFICATION_CODE_EXPIRE_MINUTES: int = 10
+    SOCIAL_VERIFICATION_CODE_PREFIX: str = "BIMS"
+
+    # RabbitMQ (Instagram verification worker)
+    RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
+    INSTAGRAM_VERIFICATION_QUEUE: str = "instagram_verification"
+    INSTAGRAM_VERIFICATION_ENABLED: bool = True  # Kill switch for async verification
+
     # CORS Settings (can be comma-separated string or list)
     CORS_ORIGINS: Union[str, List[str]] = "http://localhost:3000,http://localhost:8000"
     
@@ -40,6 +49,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra env vars (e.g. worker-only INSTAGRAM_*)
 
 
 settings = Settings()

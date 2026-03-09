@@ -32,7 +32,8 @@
 3. **Create environment file** (optional, defaults are set):
    ```bash
    # Copy the example (if .env.example exists)
-   # Or create .env manually with your settings
+   cp .env.example .env
+   # Or create .env manually in the project root with your settings
    ```
 
 4. **Run the server** (database will be created automatically):
@@ -90,6 +91,17 @@
 - All schemas are in `app/schemas/`
 - API endpoints are in `app/api/v1/endpoints/`
 - Configuration is in `app/core/config.py`
+
+## Environment variables – where to keep them
+
+Use **one `.env` file in the project root** for both the FastAPI app and the Instagram verification worker.
+
+| What                | Where to put env        | How it's loaded |
+|---------------------|-------------------------|------------------|
+| **FastAPI app**     | `.env` in project root  | `app/core/config.py` (pydantic-settings) reads `.env` when the app starts. |
+| **Worker**          | Same `.env` in project root | When you run `python -m worker.main` from the project root, the worker loads `.env` from the project root. |
+
+**Steps:** Put all variables in `.env` at the project root (same folder as `app/`, `worker/`, `requirements.txt`). Run both the app and the worker from the project root so they find the same file. See `.env.example` for a list of variables. Do not commit `.env`.
 
 ## 🗄️ Database Migration to PostgreSQL
 

@@ -52,6 +52,11 @@ class CreatorVerificationStatus(str, enum.Enum):
     REJECTED = "REJECTED"
 
 
+class CreatorType(str, enum.Enum):
+    FACE = "FACE"
+    FACELESS = "FACELESS"
+
+
 class Creator(Base):
     """
     Creator extension for a user (maps conceptually to Influencer).
@@ -61,6 +66,16 @@ class Creator(Base):
 
     id = Column(String, primary_key=True, default=_uuid_str)
     user_id = Column(String, ForeignKey("users.id"), unique=True, nullable=False)
+    creator_type = Column(Enum(CreatorType), nullable=True)  # Set when connecting first social / onboarding
+    # Face creator only
+    name = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    reel_price = Column(Float, nullable=True)
+    story_price = Column(Float, nullable=True)
+    reel_story_price = Column(Float, nullable=True)  # Combined reel+story price
+    state = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    language = Column(String, nullable=True)
     total_earnings = Column(Float, default=0.0, nullable=False)
     wallet_balance = Column(Float, default=0.0, nullable=False)
     verification_status = Column(

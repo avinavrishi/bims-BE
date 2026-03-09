@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -48,6 +49,47 @@ class SocialAccount(Base):
     creator = relationship(Creator, backref="social_accounts")
 
 
+class SocialVerificationStatus(str, enum.Enum):
+    """Status of bio verification flow"""
+    CODE_ACTIVE = "CODE_ACTIVE"  # Code issued, user has time to add to bio
+    PENDING_VERIFICATION = "PENDING_VERIFICATION"  # User confirmed; waiting for admin/auto verify
+    PENDING = "PENDING"  # Queued for async worker (e.g. Instagram)
+    VERIFIED = "VERIFIED"  # Bio checked, account linked
+    FAILED = "FAILED"  # Worker checked, code not found in bio
+    ERROR = "ERROR"  # Automation/worker error
+    REJECTED = "REJECTED"  # Verification failed
+    EXPIRED = "EXPIRED"  # Code expired before completion
+
+
+class SocialAccountVerification(Base):
+    """
+    Tracks social account verification via bio code.
+    Creator gets a code, adds it to their profile bio within the time window,
+    then we verify (admin or automated) and create SocialAccount on success.
+    """
+    __tablename__ = "social_account_verifications"
+
+    id = Column(String, primary_key=True, default=_uuid_str)
+    creator_id = Column(String, ForeignKey("creators.id"), nullable=False, index=True)
+    platform = Column(Enum(SocialPlatform), nullable=False)
+    username = Column(String, nullable=False)  # Handle they are claiming
+    verification_code = Column(String, nullable=False, unique=True, index=True)
+    status = Column(
+        Enum(SocialVerificationStatus),
+        default=SocialVerificationStatus.CODE_ACTIVE,
+        nullable=False,
+    )
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)  # When user clicked "I've added the code"
+    verified_at = Column(DateTime, nullable=True)  # When admin/auto verified
+    verified_by_user_id = Column(String, ForeignKey("users.id"), nullable=True)  # Admin who verified
+    social_account_id = Column(String, ForeignKey("social_accounts.id"), nullable=True)
+
+    creator = relationship(Creator, backref="social_verifications")
+    social_account = relationship(SocialAccount, backref="verification", uselist=False)
+
+
 class CampaignParticipationStatus(str, enum.Enum):
     APPLIED = "APPLIED"
     APPROVED = "APPROVED"
@@ -56,6 +98,9 @@ class CampaignParticipationStatus(str, enum.Enum):
 
 class CampaignParticipation(Base):
     __tablename__ = "campaign_participations"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "creator_id", name="uq_campaign_participation_campaign_creator"),
+    )
 
     id = Column(String, primary_key=True, default=_uuid_str)
     campaign_id = Column(String, ForeignKey("campaigns.id"), nullable=False, index=True)
@@ -64,6 +109,7 @@ class CampaignParticipation(Base):
         Enum(CampaignParticipationStatus),
         default=CampaignParticipationStatus.APPLIED,
         nullable=False,
+        index=True,
     )
     total_submissions = Column(Integer, default=0, nullable=False)
     total_earned = Column(Float, default=0.0, nullable=False)

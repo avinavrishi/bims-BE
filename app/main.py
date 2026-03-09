@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import init_db, check_db_exists
 from app.api.v1.api import api_router
+from app.core.rabbitmq import init_rabbitmq, close_rabbitmq
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,16 +43,24 @@ async def startup_event():
     try:
         logger.info("Initializing database...")
         init_db()
-        
+
         # Check if database exists (for logging purposes)
         db_exists = check_db_exists()
         if db_exists:
             logger.info("Database initialized successfully - tables created/verified")
         else:
             logger.info("Database file created and initialized successfully")
+
+        await init_rabbitmq()
     except Exception as e:
         logger.error(f"Error initializing database: {e}")
         raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up RabbitMQ connection on shutdown."""
+    await close_rabbitmq()
 
 
 @app.get("/")

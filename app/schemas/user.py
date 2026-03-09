@@ -13,11 +13,10 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """
-    Creator signup schema.
+    Creator signup schema. Display name/username is asked on first login, not at registration.
     """
 
     password: str
-    display_name: str
 
 
 class BrandUserCreate(UserBase):
@@ -38,6 +37,7 @@ class UserLogin(BaseModel):
 
 class UserResponse(UserBase):
     id: str
+    username: Optional[str] = None
     role: UserRole
     status: UserStatus
     created_at: datetime
