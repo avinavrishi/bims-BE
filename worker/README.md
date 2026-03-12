@@ -128,3 +128,42 @@ If you prefer not to put credentials on the server:
    ```
 
 When the session expires, either run `save_instagram_session` again and replace the file, or use Option A with credentials so the worker can re-login and overwrite the file automatically.
+
+## Testing and account validation
+
+### Validate Instagram account (session or credentials)
+
+From project root, run:
+
+```bash
+python -m worker.validate_instagram_account
+```
+
+This script:
+
+1. **XPath check** (when using credentials, no session file): Loads the Instagram login page and verifies that the configured XPaths (username, password, login button) find visible elements. If they don’t, Instagram’s DOM may have changed — update `INSTAGRAM_XPATH_*` in `.env`.
+2. **Login**: Uses `instagram_state.json` (or `INSTAGRAM_SESSION_STATE_PATH`) if present and valid; otherwise logs in with `INSTAGRAM_USERNAME` and `INSTAGRAM_PASSWORD` using the same XPath-based flow as the worker.
+3. **Verification**: Opens Instagram and confirms we are not on the login page (i.e. logged in).
+
+Requires either a valid session file or `INSTAGRAM_USERNAME` + `INSTAGRAM_PASSWORD` in `.env`.
+
+### Pytest tests
+
+From project root:
+
+```bash
+pip install -r requirements.txt
+playwright install chromium
+pytest tests/ -v
+```
+
+- **Unit tests** (no network): Run by default. They cover `_mask_password`, `_has_credentials`, `_is_login_page`, and profile URL building.
+- **Integration tests** (live Instagram): Skipped unless you set `RUN_INSTAGRAM_INTEGRATION=1` then run `pytest tests/ -v`. Integration tests include:
+  - **XPath tests** (`tests/test_instagram_xpaths.py`): Load the real login page and assert that the configured XPaths find the username, password, and login button elements.
+  - **Account validation** (`tests/test_instagram_client.py`): Get a logged-in context (session or credentials), open Instagram, and confirm we are not on the login page; and run `check_bio_contains_code` to ensure the full flow works.
+
+Run only unit tests (no Instagram, no credentials):
+
+```bash
+pytest tests/ -v -m "not instagram_integration"
+```

@@ -64,31 +64,30 @@ def init_db():
     # Create all tables (only creates if they don't exist)
     Base.metadata.create_all(bind=engine)
 
-    # Bootstrap default admin user
-    from app.models.user import UserRole, UserStatus  # local import to avoid cycles
-    from app.core.security import get_password_hash
-
-    admin_email = "admin@gmail.com"
-    admin_password = "Admin@123"
+    # Bootstrap default admin user only if ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD are set in .env
+    admin_email = os.getenv("ADMIN_BOOTSTRAP_EMAIL", "").strip()
+    admin_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD", "").strip()
 
     db = SessionLocal()
     try:
-        from app.models.user import User as UserModel
+        if admin_email and admin_password:
+            from app.models.user import UserRole, UserStatus  # local import to avoid cycles
+            from app.core.security import get_password_hash
+            from app.models.user import User as UserModel
 
-        existing_admin = (
-            db.query(UserModel)
-            .filter(UserModel.email == admin_email)
-            .first()
-        )
-        if not existing_admin:
-            admin_user = UserModel(
-                email=admin_email,
-                password_hash=get_password_hash(admin_password),
-                role=UserRole.ADMIN,
-                status=UserStatus.ACTIVE,
+            existing_admin = (
+                db.query(UserModel)
+                .filter(UserModel.email == admin_email)
+                .first()
             )
-            db.add(admin_user)
-            db.commit()
+            if not existing_admin:
+                admin_user = UserModel(
+                    email=admin_email,
+                    password_hash=get_password_hash(admin_password),
+                    role=UserRole.ADMIN,
+                    status=UserStatus.ACTIVE,
+                )
+                db.add(admin_user)
 
         # Seed Platform table with Instagram, YouTube, TikTok (for campaign-platform mapping)
         from app.models.platform import Platform as PlatformModel

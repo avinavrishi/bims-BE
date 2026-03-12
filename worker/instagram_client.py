@@ -23,13 +23,12 @@ INSTAGRAM_PASSWORD = os.getenv("INSTAGRAM_PASSWORD", "")
 NAV_TIMEOUT = 20000
 LOGIN_WAIT_TIMEOUT = 15000
 
-# Instagram login form XPaths (from env; update in .env if Instagram changes their DOM)
-_DEFAULT_XPATH_USER = '//*[@id="_R_32d9lplcldcpbn6b5ipamH1_"]'
-_DEFAULT_XPATH_PASS = '//*[@id="_R_33d9lplcldcpbn6b5ipamH1_"]'
-_DEFAULT_XPATH_BTN = '//*[@id="login_form"]/div/div[1]/div/div[3]/div/div/div'
-XPATH_USERNAME = os.getenv("INSTAGRAM_XPATH_USERNAME", _DEFAULT_XPATH_USER)
-XPATH_PASSWORD = os.getenv("INSTAGRAM_XPATH_PASSWORD", _DEFAULT_XPATH_PASS)
-XPATH_LOGIN_BUTTON = os.getenv("INSTAGRAM_XPATH_LOGIN_BUTTON", _DEFAULT_XPATH_BTN)
+# Instagram login form XPaths – load from .env only (no defaults in code).
+# Set INSTAGRAM_XPATH_USERNAME, INSTAGRAM_XPATH_PASSWORD, INSTAGRAM_XPATH_LOGIN_BUTTON in .env.
+# See .env.example for current values; update there if Instagram changes their DOM.
+XPATH_USERNAME = os.getenv("INSTAGRAM_XPATH_USERNAME", "").strip()
+XPATH_PASSWORD = os.getenv("INSTAGRAM_XPATH_PASSWORD", "").strip()
+XPATH_LOGIN_BUTTON = os.getenv("INSTAGRAM_XPATH_LOGIN_BUTTON", "").strip()
 
 
 def _mask_password(pwd: str) -> str:
@@ -51,12 +50,28 @@ async def _is_login_page(page) -> bool:
     return "/accounts/login" in url or "challenge" in url.lower() or "/accounts/onetap" in url
 
 
+def _require_xpaths() -> None:
+    """Raise if any login form XPath is not set (must be set in .env for auto-login)."""
+    missing = []
+    if not XPATH_USERNAME:
+        missing.append("INSTAGRAM_XPATH_USERNAME")
+    if not XPATH_PASSWORD:
+        missing.append("INSTAGRAM_XPATH_PASSWORD")
+    if not XPATH_LOGIN_BUTTON:
+        missing.append("INSTAGRAM_XPATH_LOGIN_BUTTON")
+    if missing:
+        raise RuntimeError(
+            f"Instagram login form XPaths not set. Set in .env: {', '.join(missing)}. See .env.example for values."
+        )
+
+
 async def _do_login(context, page) -> bool:
     """
     Perform username/password login on the current page.
     Returns True if login succeeded (we left the login page), False otherwise.
-    Uses XPaths for username, password, and login button (Instagram's DOM).
+    Uses XPaths for username, password, and login button (from .env).
     """
+    _require_xpaths()
     try:
         print("[WORKER] Stage: Instagram login page loaded; waiting for username field...")
         username_input = page.locator(f"xpath={XPATH_USERNAME}")
