@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_APP_PASSWORD: str = ""
+
+    # Google OAuth – load from .env
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    # Frontend URL to redirect after Google login (with tokens in fragment). e.g. http://localhost:3000/auth/callback
+    OAUTH_FRONTEND_CALLBACK_URL: str = "http://localhost:3000/auth/callback"
     
     @property
     def cors_origins_list(self) -> List[str]:

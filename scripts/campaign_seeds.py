@@ -1,39 +1,147 @@
 """
-Seed sample campaigns into the database
+Seed a sample brand (and its user) and campaigns into the database.
+
+Run from project root: python scripts/campaign_seeds.py
 """
 
 from datetime import date, timedelta
 
 from app.core.database import SessionLocal
+from app.core.security import get_password_hash
 from app.models.campaign import (
     Campaign,
     CampaignStatus,
     CampaignContentType,
 )
 from app.models.brand import Brand
+from app.models.user import User, UserRole, UserStatus
+from app.models.profile import Profile, Creator, CreatorVerificationStatus
+
+
+# Seed brand user + brand (created if not present)
+SEED_BRAND_EMAIL = "brand1@gmail.com"
+SEED_BRAND_PASSWORD = "Brand@123"  # for dev only; change in production
+SEED_COMPANY_NAME = "Demo Brand Co"
+SEED_INDUSTRY = "Technology"
+SEED_WEBSITE = "https://demobrand.example.com"
+
+# Seed creator user (User + Profile + Creator)
+SEED_CREATOR_EMAIL = "user1@gmail.com"
+SEED_CREATOR_PASSWORD = "Fuck1@Society"  # for dev only
+SEED_CREATOR_DISPLAY_NAME = "Demo Creator"
+
+
+def get_or_create_seed_brand(db):
+    """
+    Return a brand to use for seeding. Creates a BRAND user and Brand if none exist.
+    """
+    # Prefer existing brand with our seed email
+    user = db.query(User).filter(User.email == SEED_BRAND_EMAIL).first()
+    if user:
+        brand = db.query(Brand).filter(Brand.user_id == user.id).first()
+        if brand:
+            return brand
+        # User exists but no brand (shouldn't happen)
+        brand = Brand(
+            user_id=user.id,
+            company_name=SEED_COMPANY_NAME,
+            industry=SEED_INDUSTRY,
+            website=SEED_WEBSITE,
+        )
+        db.add(brand)
+        db.commit()
+        db.refresh(brand)
+        return brand
+
+    # Create brand user + brand
+    user = User(
+        email=SEED_BRAND_EMAIL,
+        password_hash=get_password_hash(SEED_BRAND_PASSWORD),
+        role=UserRole.BRAND,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(user)
+    db.flush()
+
+    brand = Brand(
+        user_id=user.id,
+        company_name=SEED_COMPANY_NAME,
+        industry=SEED_INDUSTRY,
+        website=SEED_WEBSITE,
+    )
+    db.add(brand)
+    db.commit()
+    db.refresh(brand)
+    print(f"✅ Created brand user and brand: {SEED_COMPANY_NAME} ({SEED_BRAND_EMAIL})")
+    return brand
+
+
+def get_or_create_seed_creator(db):
+    """
+    Return a creator user for seeding. Creates User + Profile + Creator if not present.
+    """
+    user = db.query(User).filter(User.email == SEED_CREATOR_EMAIL).first()
+    if user:
+        creator = db.query(Creator).filter(Creator.user_id == user.id).first()
+        if creator:
+            return creator
+        # User exists but no Profile/Creator
+        profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+        if not profile:
+            profile = Profile(user_id=user.id, display_name=SEED_CREATOR_DISPLAY_NAME)
+            db.add(profile)
+            db.flush()
+        creator = Creator(
+            user_id=user.id,
+            total_earnings=0.0,
+            wallet_balance=0.0,
+            verification_status=CreatorVerificationStatus.PENDING,
+        )
+        db.add(creator)
+        db.commit()
+        db.refresh(creator)
+        print(f"✅ Created Profile + Creator for existing user: {SEED_CREATOR_EMAIL}")
+        return creator
+
+    user = User(
+        email=SEED_CREATOR_EMAIL,
+        password_hash=get_password_hash(SEED_CREATOR_PASSWORD),
+        role=UserRole.CREATOR,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(user)
+    db.flush()
+
+    profile = Profile(user_id=user.id, display_name=SEED_CREATOR_DISPLAY_NAME)
+    creator = Creator(
+        user_id=user.id,
+        total_earnings=0.0,
+        wallet_balance=0.0,
+        verification_status=CreatorVerificationStatus.PENDING,
+    )
+    db.add(profile)
+    db.add(creator)
+    db.commit()
+    db.refresh(creator)
+    print(f"✅ Created creator user: {SEED_CREATOR_DISPLAY_NAME} ({SEED_CREATOR_EMAIL})")
+    return creator
 
 
 def seed_campaigns():
     db = SessionLocal()
     try:
         # --------------------------------------------------
-        # Fetch existing brands (must exist first)
+        # Get or create the seed brand and seed creator
         # --------------------------------------------------
-        brands = db.query(Brand).all()
-
-        if not brands:
-            print("❌ No brands found. Please create brands first.")
-            return
-
-        # Use first brand for demo
-        brand = brands[0]
+        brand = get_or_create_seed_brand(db)
+        get_or_create_seed_creator(db)
 
         # --------------------------------------------------
-        # Check if campaigns already exist
+        # Check if campaigns already exist for this brand
         # --------------------------------------------------
-        existing = db.query(Campaign).count()
+        existing = db.query(Campaign).filter(Campaign.brand_id == brand.id).count()
         if existing > 0:
-            print("ℹ️ Campaigns already exist. Skipping seeding.")
+            print("ℹ️ Campaigns already exist for this brand. Skipping campaign seeding.")
             return
 
         today = date.today()
@@ -95,7 +203,7 @@ def seed_campaigns():
         db.add_all(campaigns)
         db.commit()
 
-        print(f"✅ Seeded {len(campaigns)} campaigns successfully.")
+        print(f"✅ Seeded {len(campaigns)} campaigns under brand '{brand.company_name}'.")
 
     except Exception as e:
         db.rollback()

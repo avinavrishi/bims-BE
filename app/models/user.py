@@ -35,7 +35,7 @@ class User(Base):
     id = Column(String, primary_key=True, default=_uuid_str, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=True)  # Creator display username; set once on first login
-    password_hash = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)  # None for OAuth-only (e.g. Google) users; set when they set password
     role = Column(Enum(UserRole), nullable=False, default=UserRole.CREATOR)
     status = Column(Enum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
