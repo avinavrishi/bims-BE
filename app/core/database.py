@@ -48,6 +48,7 @@ def init_db():
         AuthSession,
         RefreshToken,
         LoginAudit,
+        OtpVerification,
         Profile,
         Creator,
         SocialAccount,

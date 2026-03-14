@@ -59,3 +59,41 @@ def hash_refresh_token(token: str) -> str:
     material = f"{settings.SECRET_KEY}:{token}".encode("utf-8")
     return hashlib.sha256(material).hexdigest()
 
+
+def hash_otp(otp: str) -> str:
+    """Hash OTP for storage (do not store plain OTP)."""
+    material = f"{settings.SECRET_KEY}:otp:{otp}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
+
+
+def verify_otp(plain_otp: str, otp_hash: str) -> bool:
+    """Verify user-provided OTP against stored hash."""
+    return hash_otp(plain_otp) == otp_hash
+
+
+# Registration token (short-lived JWT after OTP verify; used to complete signup)
+REGISTRATION_TOKEN_TYPE = "registration"
+
+
+def create_registration_token(email: str) -> str:
+    """Create a short-lived JWT for completing registration (email in payload)."""
+    expire = datetime.utcnow() + timedelta(minutes=settings.REGISTRATION_TOKEN_EXPIRE_MINUTES)
+    to_encode = {
+        "sub": email,
+        "email": email,
+        "type": REGISTRATION_TOKEN_TYPE,
+        "exp": expire,
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_registration_token(token: str) -> Optional[dict]:
+    """Decode and verify registration token; return payload with email or None."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != REGISTRATION_TOKEN_TYPE:
+            return None
+        return payload
+    except JWTError:
+        return None
+

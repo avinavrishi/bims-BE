@@ -1,6 +1,8 @@
 """
 Authentication Endpoints (JWT + sessions + refresh token rotation)
+Includes OTP-based registration: request-otp → verify-otp → complete (with username).
 """
+import secrets
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -8,23 +10,188 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from app.api.v1.dependencies import get_current_user
+from app.api.v1.dependencies import get_current_user, get_registration_email
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.email_service import send_otp_email
 from app.core.security import (
     create_access_token,
     create_refresh_token,
+    create_registration_token,
     get_password_hash,
+    hash_otp,
     hash_refresh_token,
+    verify_otp,
     verify_password,
 )
-from app.models.auth_models import AuthSession, LoginAudit, LoginStatus, RefreshToken
+from app.models.auth_models import AuthSession, LoginAudit, LoginStatus, OtpVerification, RefreshToken
 from app.models.profile import Profile, Creator, CreatorVerificationStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.brand import Brand
-from app.schemas.user import TokenPair, UserCreate, BrandUserCreate, UserLogin, UserResponse
+from app.schemas.user import (
+    TokenPair,
+    UserCreate,
+    BrandUserCreate,
+    UserLogin,
+    UserResponse,
+    RequestOtpRequest,
+    VerifyOtpRequest,
+    VerifyOtpResponse,
+    ResendOtpRequest,
+    CompleteRegistrationRequest,
+)
 
 router = APIRouter()
+
+OTP_EXPIRE_MINUTES = settings.OTP_EXPIRE_MINUTES
+REGISTRATION_TOKEN_EXPIRE_MINUTES = settings.REGISTRATION_TOKEN_EXPIRE_MINUTES
+
+
+def _generate_otp() -> str:
+    """Generate 6-digit numeric OTP."""
+    return "".join(secrets.choice("0123456789") for _ in range(6))
+
+
+@router.post("/register/request-otp", status_code=status.HTTP_200_OK)
+async def request_otp(body: RequestOtpRequest, db: Session = Depends(get_db)):
+    """
+    Step 1 of registration: send a 6-digit OTP to the given email.
+    If email is already registered, returns 400. Otherwise creates/overwrites OTP (valid 10 min) and sends email.
+    """
+    result = db.execute(select(User).where(User.email == body.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
+    otp = _generate_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=OTP_EXPIRE_MINUTES)
+    otp_hash = hash_otp(otp)
+
+    existing = db.execute(select(OtpVerification).where(OtpVerification.email == body.email)).scalar_one_or_none()
+    if existing:
+        existing.otp_hash = otp_hash
+        existing.expires_at = expires_at
+        existing.used_at = None
+    else:
+        db.add(OtpVerification(email=body.email, otp_hash=otp_hash, expires_at=expires_at))
+    db.commit()
+
+    if not send_otp_email(body.email, otp):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send OTP email. Check server SMTP configuration.",
+        )
+    return {"message": "OTP sent to your email", "expires_in_minutes": OTP_EXPIRE_MINUTES}
+
+
+@router.post("/register/verify-otp", response_model=VerifyOtpResponse)
+async def verify_otp(body: VerifyOtpRequest, db: Session = Depends(get_db)):
+    """
+    Step 2: Verify the OTP. If valid, returns a short-lived registration_token.
+    Use that token in Authorization header when calling POST /auth/register/complete.
+    If OTP is expired, returns 400 with detail 'OTP expired' and code so frontend can offer resend.
+    """
+    row = db.execute(select(OtpVerification).where(OtpVerification.email == body.email)).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No OTP found for this email. Request one first.")
+    if row.used_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP already used. Request a new one.")
+    if datetime.utcnow() > row.expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP expired. Please request a new one.",
+        )
+    if not verify_otp(body.otp.strip(), row.otp_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP.")
+
+    token = create_registration_token(body.email)
+    return VerifyOtpResponse(
+        registration_token=token,
+        expires_in=REGISTRATION_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+@router.post("/register/resend-otp", status_code=status.HTTP_200_OK)
+async def resend_otp(body: ResendOtpRequest, db: Session = Depends(get_db)):
+    """
+    Resend OTP to the same email. Invalidates the previous OTP; new one valid for 10 minutes.
+    """
+    result = db.execute(select(User).where(User.email == body.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered.")
+
+    otp = _generate_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=OTP_EXPIRE_MINUTES)
+    otp_hash = hash_otp(otp)
+
+    row = db.execute(select(OtpVerification).where(OtpVerification.email == body.email)).scalar_one_or_none()
+    if row:
+        row.otp_hash = otp_hash
+        row.expires_at = expires_at
+        row.used_at = None
+    else:
+        db.add(OtpVerification(email=body.email, otp_hash=otp_hash, expires_at=expires_at))
+    db.commit()
+
+    if not send_otp_email(body.email, otp):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send OTP email. Check server SMTP configuration.",
+        )
+    return {"message": "New OTP sent to your email", "expires_in_minutes": OTP_EXPIRE_MINUTES}
+
+
+@router.post(
+    "/register/complete",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def complete_registration(
+    body: CompleteRegistrationRequest,
+    email: str = Depends(get_registration_email),
+    db: Session = Depends(get_db),
+):
+    """
+    Step 3: Complete creator registration with password and display name.
+    Requires Authorization: Bearer <registration_token> from verify-otp.
+    Creates user, profile, and creator; marks OTP as used.
+    """
+    result = db.execute(select(User).where(User.email == email))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered.")
+
+    row = db.execute(select(OtpVerification).where(OtpVerification.email == email)).scalar_one_or_none()
+    if not row or row.used_at or datetime.utcnow() > row.expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP expired or already used. Please verify OTP again.",
+        )
+
+    password_hash = get_password_hash(body.password)
+    new_user = User(
+        email=email,
+        password_hash=password_hash,
+        role=UserRole.CREATOR,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(new_user)
+    db.flush()
+
+    profile = Profile(user_id=new_user.id, display_name=body.display_name.strip())
+    creator = Creator(
+        user_id=new_user.id,
+        total_earnings=0.0,
+        wallet_balance=0.0,
+        verification_status=CreatorVerificationStatus.PENDING,
+    )
+    db.add(profile)
+    db.add(creator)
+
+    row.used_at = datetime.utcnow()
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 
 @router.post(
@@ -33,7 +200,7 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Register a new creator."""
+    """Register a new creator (legacy: single-step, no OTP). Prefer /register/request-otp → verify-otp → complete."""
     result = db.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
     if existing_user:

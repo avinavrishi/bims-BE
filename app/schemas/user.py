@@ -61,3 +61,34 @@ class TokenData(BaseModel):
     user_id: Optional[str] = None
     email: Optional[str] = None
 
+
+# --- OTP registration flow ---
+
+
+class RequestOtpRequest(BaseModel):
+    """Request OTP for registration; sends 6-digit OTP to email."""
+    email: EmailStr
+
+
+class VerifyOtpRequest(BaseModel):
+    """Verify OTP and receive a short-lived registration token."""
+    email: EmailStr
+    otp: str  # 6-digit string
+
+
+class VerifyOtpResponse(BaseModel):
+    """Returned after successful OTP verification; use registration_token in Authorization to complete signup."""
+    registration_token: str
+    expires_in: int  # seconds until token expires
+
+
+class ResendOtpRequest(BaseModel):
+    """Resend OTP to the same email (invalidates previous OTP)."""
+    email: EmailStr
+
+
+class CompleteRegistrationRequest(BaseModel):
+    """Complete creator registration after OTP verified. Send with Authorization: Bearer <registration_token>."""
+    password: str
+    display_name: str
+
