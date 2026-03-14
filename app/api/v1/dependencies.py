@@ -4,7 +4,7 @@ API Dependencies
 from fastapi import Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, decode_registration_token
 from app.models.user import User, UserStatus, UserRole
 
 
@@ -57,6 +57,27 @@ def get_current_brand_user(
             detail="This endpoint is only accessible to brands"
         )
     return current_user
+
+
+def get_registration_email(
+    authorization: str = Header(..., alias="Authorization"),
+) -> str:
+    """Dependency for complete-registration: require Bearer <registration_token>, return email from token."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired registration token. Verify OTP again.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise credentials_exception
+    payload = decode_registration_token(parts[1])
+    if not payload:
+        raise credentials_exception
+    email = payload.get("email") or payload.get("sub")
+    if not email:
+        raise credentials_exception
+    return email
 
 
 def get_current_brand_or_admin(

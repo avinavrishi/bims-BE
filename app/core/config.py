@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     # File Upload Settings
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
     UPLOAD_DIR: str = "uploads"
+
+    # OTP (registration) – expiry in minutes
+    OTP_EXPIRE_MINUTES: int = 10
+    REGISTRATION_TOKEN_EXPIRE_MINUTES: int = 15
+
+    # SMTP (Gmail) – load from .env; used for OTP emails
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_APP_PASSWORD: str = ""
     
     @property
     def cors_origins_list(self) -> List[str]:
