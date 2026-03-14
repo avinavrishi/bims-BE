@@ -1,14 +1,17 @@
 """
 Authentication Endpoints (JWT + sessions + refresh token rotation)
-Includes OTP-based registration: request-otp → verify-otp → complete (with username).
+Includes OTP-based registration and Google OAuth login.
 """
 import secrets
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from authlib.integrations.starlette_client import OAuth
 
 from app.api.v1.dependencies import get_current_user, get_registration_email
 from app.core.config import settings
@@ -45,6 +48,16 @@ router = APIRouter()
 
 OTP_EXPIRE_MINUTES = settings.OTP_EXPIRE_MINUTES
 REGISTRATION_TOKEN_EXPIRE_MINUTES = settings.REGISTRATION_TOKEN_EXPIRE_MINUTES
+
+# Google OAuth (authlib) – client_id and client_secret from .env
+oauth = OAuth()
+oauth.register(
+    name="google",
+    client_id=settings.GOOGLE_CLIENT_ID,
+    client_secret=settings.GOOGLE_CLIENT_SECRET,
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 
 def _generate_otp() -> str:
@@ -153,7 +166,7 @@ async def complete_registration(
     db: Session = Depends(get_db),
 ):
     """
-    Step 3: Complete creator registration with password and display name.
+    Step 3: Complete creator registration with password only. Username is set by user on first dashboard visit.
     Requires Authorization: Bearer <registration_token> from verify-otp.
     Creates user, profile, and creator; marks OTP as used.
     """
@@ -178,7 +191,8 @@ async def complete_registration(
     db.add(new_user)
     db.flush()
 
-    profile = Profile(user_id=new_user.id, display_name=body.display_name.strip())
+    display_name = (email.split("@")[0] or "User").strip()[:255]
+    profile = Profile(user_id=new_user.id, display_name=display_name)
     creator = Creator(
         user_id=new_user.id,
         total_earnings=0.0,
@@ -192,6 +206,124 @@ async def complete_registration(
     db.commit()
     db.refresh(new_user)
     return new_user
+
+
+# --- Google OAuth ---
+
+
+@router.get("/login/google")
+async def login_google(request: Request):
+    """
+    Redirects the user to Google sign-in. After approval, Google redirects back to
+    GET /auth/google/callback. Configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.
+    """
+    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.",
+        )
+    # url_for returns full URL in some setups; use as-is if absolute, else prepend base
+    path = request.url_for("auth_google_callback")
+    redirect_uri = str(path)
+    if not redirect_uri.startswith("http"):
+        redirect_uri = str(request.base_url).rstrip("/") + redirect_uri
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/google/callback", name="auth_google_callback")
+async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
+    """
+    Google OAuth callback. Finds or creates user by email (password_hash=None for OAuth users),
+    creates session and tokens, then redirects to frontend with tokens in URL fragment.
+    """
+    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Google OAuth not configured.")
+
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"OAuth error: {e}") from e
+
+    userinfo = token.get("userinfo")
+    if not userinfo:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user info from Google.")
+
+    email = userinfo.get("email")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email not provided by Google.")
+
+    result = db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        display_name = (email.split("@")[0] or "User").strip()[:255]
+        user = User(
+            email=email,
+            password_hash=None,
+            role=UserRole.CREATOR,
+            status=UserStatus.ACTIVE,
+        )
+        db.add(user)
+        db.flush()
+        profile = Profile(user_id=user.id, display_name=display_name)
+        creator = Creator(
+            user_id=user.id,
+            total_earnings=0.0,
+            wallet_balance=0.0,
+            verification_status=CreatorVerificationStatus.PENDING,
+        )
+        db.add(profile)
+        db.add(creator)
+
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is not active.")
+
+    session_expires_at = datetime.utcnow() + timedelta(days=settings.SESSION_EXPIRE_DAYS)
+    session = AuthSession(
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        is_active=True,
+        last_used_at=datetime.utcnow(),
+        expires_at=session_expires_at,
+    )
+    db.add(session)
+    db.flush()
+
+    access_token = create_access_token(
+        data={
+            "sub": user.email,
+            "user_id": user.id,
+            "role": user.role.value,
+            "session_id": session.id,
+        },
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    refresh_token_raw = create_refresh_token()
+    refresh_expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh = RefreshToken(
+        session_id=session.id,
+        token_hash=hash_refresh_token(refresh_token_raw),
+        revoked=False,
+        expires_at=refresh_expires_at,
+    )
+    db.add(refresh)
+    db.commit()
+
+    # Redirect to frontend with tokens in URL fragment: .../auth/callback#access_token=...&refresh_token=...&token_type=bearer
+    frontend_base = (settings.OAUTH_FRONTEND_CALLBACK_URL or "").strip() or "http://localhost:3000/auth/callback"
+    base_url = frontend_base.split("#")[0].split("?")[0].rstrip("/")
+    fragment = urlencode({
+        "access_token": access_token,
+        "refresh_token": refresh_token_raw,
+        "token_type": "bearer",
+    })
+    redirect_url = f"{base_url}#{fragment}"
+    print(redirect_url)
+    print(base_url)
+    print(fragment)
+    print("================================================")
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
 
 
 @router.post(
@@ -282,11 +414,28 @@ async def login(credentials: UserLogin, request: Request, db: Session = Depends(
     result = db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(credentials.password, user.password_hash):
-        audit = LoginAudit(
-            user_id=user.id if user else None,
-            status=LoginStatus.FAILED,
+    if not user:
+        audit = LoginAudit(user_id=None, status=LoginStatus.FAILED)
+        db.add(audit)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if user.password_hash is None:
+        audit = LoginAudit(user_id=user.id, status=LoginStatus.FAILED)
+        db.add(audit)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account uses Google sign-in. Please use Login with Google.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not verify_password(credentials.password, user.password_hash):
+        audit = LoginAudit(user_id=user.id, status=LoginStatus.FAILED)
         db.add(audit)
         db.commit()
         raise HTTPException(

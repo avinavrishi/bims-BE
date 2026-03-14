@@ -88,7 +88,6 @@ class ResendOtpRequest(BaseModel):
 
 
 class CompleteRegistrationRequest(BaseModel):
-    """Complete creator registration after OTP verified. Send with Authorization: Bearer <registration_token>."""
+    """Complete creator registration after OTP verified. Send with Authorization: Bearer <registration_token>. Username is set later on first dashboard visit."""
     password: str
-    display_name: str
 
