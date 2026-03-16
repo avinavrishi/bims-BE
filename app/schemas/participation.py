@@ -14,6 +14,21 @@ class CampaignParticipationCreate(BaseModel):
     campaign_id: str
 
 
+class SubmitLinkCreate(BaseModel):
+    """Schema for faceless creators: submit a content link (creates participation + submission in one)."""
+    campaign_id: str
+    content_url: str
+    social_account_id: str
+    platform_content_id: Optional[str] = None
+
+
+class SubmitLinkResponse(BaseModel):
+    """Response after faceless creator submits a link."""
+    participation_id: str
+    submission_id: str
+    message: str = "Link submitted. Your submission is under review."
+
+
 class CampaignParticipationResponse(BaseModel):
     """Schema for campaign participation response"""
     id: str

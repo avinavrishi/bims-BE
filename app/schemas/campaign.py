@@ -3,8 +3,14 @@ Campaign Schemas aligned with UML.
 """
 from pydantic import BaseModel
 from datetime import datetime, date
-from typing import Optional
+from typing import Optional, List
 from app.models.campaign import CampaignStatus, CampaignContentType
+
+
+class PlatformBrief(BaseModel):
+    """Platform id and name for campaign card/details."""
+    id: str
+    name: str
 
 
 class CampaignBase(BaseModel):
@@ -25,7 +31,9 @@ class CampaignBase(BaseModel):
 
 
 class CampaignCreate(CampaignBase):
-    pass
+    """Create campaign. Include platform_ids to link campaign to platforms. Admin may set brand_id to create on behalf of a brand."""
+    platform_ids: List[str] = []
+    brand_id: Optional[str] = None  # Only used when caller is admin; otherwise ignored
 
 
 class CampaignUpdate(BaseModel):
@@ -45,6 +53,7 @@ class CampaignUpdate(BaseModel):
     logo_drive_link: Optional[str] = None
     guidelines_link: Optional[str] = None
     discord_link: Optional[str] = None
+    platform_ids: Optional[List[str]] = None  # If set, replaces campaign's linked platforms
 
 
 class CampaignResponse(CampaignBase):
@@ -53,6 +62,9 @@ class CampaignResponse(CampaignBase):
     status: CampaignStatus
     used_budget: float
     created_at: datetime
+    platforms: List[PlatformBrief] = []  # Platforms linked to this campaign (for card/details)
+    participant_count: int = 0  # Total creators joined (participated) in this campaign
+    participant_avatars: List[str] = []  # Up to 5 profile picture URLs for campaign card avatar stack
 
     class Config:
         from_attributes = True

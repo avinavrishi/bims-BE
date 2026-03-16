@@ -16,6 +16,7 @@ from app.schemas.profile import (
     SetUsernameRequest,
     SetCreatorTypeRequest,
     CreatorTypeResponse,
+    UpdateCreatorFaceDetailsRequest,
 )
 
 router = APIRouter()
@@ -134,14 +135,19 @@ async def set_my_creator_type(
     db: Session = Depends(get_db),
 ):
     """
-    Set creator type (FACE or FACELESS). If FACE, provide the face creator form fields.
-    Typically called when connecting first social account.
+    Set creator type (FACE or FACELESS) one-time, after username is set. If FACE, provide the face creator form fields.
+    Called once during onboarding (after set username). Once set, use PATCH /me/creator-face-details to update face details.
     """
     if current_user.role.value != "CREATOR":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Creators only")
     creator = db.query(Creator).filter(Creator.user_id == current_user.id).first()
     if not creator:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Creator profile not found")
+    if creator.creator_type is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Creator type is already set. You can update your face creator details from your profile.",
+        )
     try:
         creator.creator_type = CreatorType(data.creator_type)
     except ValueError:
@@ -164,6 +170,44 @@ async def set_my_creator_type(
         creator.state = None
         creator.city = None
         creator.language = None
+    db.commit()
+    db.refresh(creator)
+    return CreatorTypeResponse(
+        creator_type=creator.creator_type.value,
+        name=creator.name,
+        category=creator.category,
+        reel_price=creator.reel_price,
+        story_price=creator.story_price,
+        reel_story_price=creator.reel_story_price,
+        state=creator.state,
+        city=creator.city,
+        language=creator.language,
+    )
+
+
+@router.patch("/me/creator-face-details", response_model=CreatorTypeResponse, status_code=status.HTTP_200_OK)
+async def update_my_creator_face_details(
+    data: UpdateCreatorFaceDetailsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update face creator details (name, category, prices, location, language). Only for creators with creator_type FACE.
+    Used on the profile page to edit these details.
+    """
+    if current_user.role.value != "CREATOR":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Creators only")
+    creator = db.query(Creator).filter(Creator.user_id == current_user.id).first()
+    if not creator:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Creator profile not found")
+    if creator.creator_type != CreatorType.FACE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Face creator details can only be updated for face creators. Your creator type is FACELESS.",
+        )
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(creator, field, value)
     db.commit()
     db.refresh(creator)
     return CreatorTypeResponse(

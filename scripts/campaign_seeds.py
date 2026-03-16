@@ -1,5 +1,7 @@
 """
 Seed a sample brand (and its user) and campaigns into the database.
+Each campaign is linked to one or more platforms (Instagram, YouTube, TikTok).
+Uses Unsplash image URLs for campaign logos.
 
 Run from project root: python scripts/campaign_seeds.py
 """
@@ -8,27 +10,29 @@ from datetime import date, timedelta
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
+from app.core.config import settings
 from app.models.campaign import (
     Campaign,
     CampaignStatus,
     CampaignContentType,
 )
 from app.models.brand import Brand
+from app.models.platform import Platform, CampaignPlatform
 from app.models.user import User, UserRole, UserStatus
 from app.models.profile import Profile, Creator, CreatorVerificationStatus
 
 
-# Seed brand user + brand (created if not present)
-SEED_BRAND_EMAIL = "brand1@gmail.com"
-SEED_BRAND_PASSWORD = "Brand@123"  # for dev only; change in production
-SEED_COMPANY_NAME = "Demo Brand Co"
-SEED_INDUSTRY = "Technology"
-SEED_WEBSITE = "https://demobrand.example.com"
+# Seed brand user + brand (created if not present) – values come from .env via settings
+SEED_BRAND_EMAIL = settings.SEED_BRAND_EMAIL or "brand@example.com"
+SEED_BRAND_PASSWORD = settings.SEED_BRAND_PASSWORD or "Brand@123"  # dev default; override in .env
+SEED_COMPANY_NAME = settings.SEED_BRAND_COMPANY_NAME or "Demo Brand Co"
+SEED_INDUSTRY = settings.SEED_BRAND_INDUSTRY or "Technology"
+SEED_WEBSITE = settings.SEED_BRAND_WEBSITE or "https://demobrand.example.com"
 
-# Seed creator user (User + Profile + Creator)
-SEED_CREATOR_EMAIL = "user1@gmail.com"
-SEED_CREATOR_PASSWORD = "Fuck1@Society"  # for dev only
-SEED_CREATOR_DISPLAY_NAME = "Demo Creator"
+# Seed creator user (User + Profile + Creator) – values come from .env via settings
+SEED_CREATOR_EMAIL = settings.SEED_CREATOR_EMAIL or "creator@example.com"
+SEED_CREATOR_PASSWORD = settings.SEED_CREATOR_PASSWORD or "Creator@123"  # dev default; override in .env
+SEED_CREATOR_DISPLAY_NAME = settings.SEED_CREATOR_DISPLAY_NAME or "Demo Creator"
 
 
 def get_or_create_seed_brand(db):
@@ -127,6 +131,286 @@ def get_or_create_seed_creator(db):
     return creator
 
 
+# Campaign definitions: list of (campaign_kwargs, platform_names).
+# platform_names: ["Instagram"], ["YouTube"], ["Instagram", "YouTube"], etc.
+# Logo URLs are Unsplash images (various themes).
+CAMPAIGN_DEFINITIONS = [
+    (
+        {
+            "title": "BetStrike [GENERAL - VIDEO]",
+            "category": "GENERAL",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Create English short-form videos promoting BetStrike.",
+            "total_budget": 2000.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 30.0,
+            "max_submissions_per_account": 50,
+            "max_earnings_per_creator": 1500.0,
+            "max_earnings_per_post": 90.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://plus.unsplash.com/premium_photo-1670005278847-3398f72aecdc?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+            "guidelines_link": "https://notion.so/example-guidelines",
+            "discord_link": "https://discord.gg/example",
+        },
+        ["Instagram", "YouTube"],
+    ),
+    (
+        {
+            "title": "CryptoPlay Reels Campaign",
+            "category": "CRYPTO",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Instagram Reels & TikTok videos for CryptoPlay app.",
+            "total_budget": 5000.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 45.0,
+            "max_submissions_per_account": 20,
+            "max_earnings_per_creator": 2000.0,
+            "max_earnings_per_post": 120.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram", "TikTok"],
+    ),
+    (
+        {
+            "title": "ShopEase Product Image Campaign",
+            "category": "E-COMMERCE",
+            "content_type": CampaignContentType.IMAGE,
+            "description": "Post product images showcasing ShopEase deals.",
+            "total_budget": 1000.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 20.0,
+            "max_submissions_per_account": 10,
+            "max_earnings_per_creator": 500.0,
+            "max_earnings_per_post": 50.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram"],
+    ),
+    (
+        {
+            "title": "FitLife Fitness Reels",
+            "category": "HEALTH",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Short fitness and workout reels for FitLife app.",
+            "total_budget": 3500.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 40.0,
+            "max_submissions_per_account": 30,
+            "max_earnings_per_creator": 1200.0,
+            "max_earnings_per_post": 80.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram", "YouTube", "TikTok"],
+    ),
+    (
+        {
+            "title": "TechGear Unboxing Videos",
+            "category": "TECHNOLOGY",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "YouTube unboxing and review videos for TechGear gadgets.",
+            "total_budget": 8000.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 55.0,
+            "max_submissions_per_account": 15,
+            "max_earnings_per_creator": 2500.0,
+            "max_earnings_per_post": 150.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["YouTube"],
+    ),
+    (
+        {
+            "title": "StyleHub Fashion Lookbook",
+            "category": "FASHION",
+            "content_type": CampaignContentType.IMAGE,
+            "description": "Instagram and TikTok fashion lookbook images and short clips.",
+            "total_budget": 4500.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 35.0,
+            "max_submissions_per_account": 25,
+            "max_earnings_per_creator": 900.0,
+            "max_earnings_per_post": 70.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1445205170230-053b83016050?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram", "TikTok"],
+    ),
+    (
+        {
+            "title": "FreshBite Food Content",
+            "category": "FOOD",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Recipe and food review videos for FreshBite delivery brand.",
+            "total_budget": 2800.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 32.0,
+            "max_submissions_per_account": 40,
+            "max_earnings_per_creator": 800.0,
+            "max_earnings_per_post": 65.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=699&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram", "YouTube"],
+    ),
+    (
+        {
+            "title": "Wanderlust Travel Vlogs",
+            "category": "TRAVEL",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Travel vlogs and destination videos for Wanderlust tours.",
+            "total_budget": 6000.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 50.0,
+            "max_submissions_per_account": 18,
+            "max_earnings_per_creator": 1800.0,
+            "max_earnings_per_post": 100.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["YouTube", "TikTok"],
+    ),
+    (
+        {
+            "title": "SportMax Energy Campaign",
+            "category": "SPORTS",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "High-energy sports and athletic content for SportMax brand.",
+            "total_budget": 4200.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 42.0,
+            "max_submissions_per_account": 22,
+            "max_earnings_per_creator": 1100.0,
+            "max_earnings_per_post": 85.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram", "YouTube"],
+    ),
+    (
+        {
+            "title": "GlowUp Beauty Tutorials",
+            "category": "BEAUTY",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Makeup and skincare tutorials for GlowUp beauty products.",
+            "total_budget": 3800.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 38.0,
+            "max_submissions_per_account": 28,
+            "max_earnings_per_creator": 950.0,
+            "max_earnings_per_post": 72.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram", "TikTok"],
+    ),
+    (
+        {
+            "title": "EduLearn Course Promo",
+            "category": "EDUCATION",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Educational explainer videos promoting EduLearn online courses.",
+            "total_budget": 5500.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 48.0,
+            "max_submissions_per_account": 20,
+            "max_earnings_per_creator": 1400.0,
+            "max_earnings_per_post": 95.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["YouTube"],
+    ),
+    (
+        {
+            "title": "StreamZone Entertainment",
+            "category": "ENTERTAINMENT",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Fun and entertaining short-form content for StreamZone platform.",
+            "total_budget": 7200.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 52.0,
+            "max_submissions_per_account": 24,
+            "max_earnings_per_creator": 2000.0,
+            "max_earnings_per_post": 110.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["Instagram", "YouTube", "TikTok"],
+    ),
+    (
+        {
+            "title": "FinanceWise Tips & Insights",
+            "category": "FINANCE",
+            "content_type": CampaignContentType.VIDEO,
+            "description": "Finance tips and investment insights for FinanceWise app.",
+            "total_budget": 4000.0,
+            "used_budget": 0.0,
+            "rate_per_million_views": 44.0,
+            "max_submissions_per_account": 16,
+            "max_earnings_per_creator": 1300.0,
+            "max_earnings_per_post": 88.0,
+            "start_date": None,
+            "end_date": None,
+            "status": CampaignStatus.ACTIVE,
+            "logo_drive_link": "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400",
+            "guidelines_link": None,
+            "discord_link": None,
+        },
+        ["YouTube", "Instagram"],
+    ),
+]
+
+
 def seed_campaigns():
     db = SessionLocal()
     try:
@@ -137,77 +421,49 @@ def seed_campaigns():
         get_or_create_seed_creator(db)
 
         # --------------------------------------------------
+        # Ensure platforms exist (Instagram, YouTube, TikTok)
+        # --------------------------------------------------
+        platform_names = ["Instagram", "YouTube", "TikTok"]
+        platforms_by_name = {}
+        for name in platform_names:
+            platform = db.query(Platform).filter(Platform.name == name).first()
+            if not platform:
+                platform = Platform(name=name)
+                db.add(platform)
+                db.flush()
+            platforms_by_name[name] = platform
+
+        # --------------------------------------------------
         # Check if campaigns already exist for this brand
         # --------------------------------------------------
         existing = db.query(Campaign).filter(Campaign.brand_id == brand.id).count()
         if existing > 0:
-            print("ℹ️ Campaigns already exist for this brand. Skipping campaign seeding.")
+            print("[INFO] Campaigns already exist for this brand. Skipping campaign seeding.")
             return
 
         today = date.today()
 
-        campaigns = [
-            Campaign(
-                brand_id=brand.id,
-                title="BetStrike [GENERAL - VIDEO]",
-                category="GENERAL",
-                content_type=CampaignContentType.VIDEO,
-                description="Create English short-form videos promoting BetStrike.",
-                total_budget=2000.0,
-                used_budget=0.0,
-                rate_per_million_views=30.0,
-                max_submissions_per_account=50,
-                max_earnings_per_creator=1500.0,
-                max_earnings_per_post=90.0,
-                start_date=today,
-                end_date=today + timedelta(days=30),
-                status=CampaignStatus.ACTIVE,
-                logo_drive_link="https://drive.google.com/example-logo",
-                guidelines_link="https://notion.so/example-guidelines",
-                discord_link="https://discord.gg/example",
-            ),
-            Campaign(
-                brand_id=brand.id,
-                title="CryptoPlay Reels Campaign",
-                category="CRYPTO",
-                content_type=CampaignContentType.VIDEO,
-                description="Instagram Reels & TikTok videos for CryptoPlay app.",
-                total_budget=5000.0,
-                used_budget=0.0,
-                rate_per_million_views=45.0,
-                max_submissions_per_account=20,
-                max_earnings_per_creator=2000.0,
-                max_earnings_per_post=120.0,
-                start_date=today,
-                end_date=today + timedelta(days=45),
-                status=CampaignStatus.ACTIVE,
-            ),
-            Campaign(
-                brand_id=brand.id,
-                title="ShopEase Product Image Campaign",
-                category="E-COMMERCE",
-                content_type=CampaignContentType.IMAGE,
-                description="Post product images showcasing ShopEase deals.",
-                total_budget=1000.0,
-                used_budget=0.0,
-                rate_per_million_views=20.0,
-                max_submissions_per_account=10,
-                max_earnings_per_creator=500.0,
-                max_earnings_per_post=50.0,
-                start_date=today - timedelta(days=10),
-                end_date=today + timedelta(days=10),
-                status=CampaignStatus.ACTIVE,
-            ),
-        ]
-
-        db.add_all(campaigns)
+        # --------------------------------------------------
+        # Create each campaign and link platforms
+        # --------------------------------------------------
+        for kwargs, platform_names_list in CAMPAIGN_DEFINITIONS:
+            data = dict(kwargs)
+            data["start_date"] = data.pop("start_date") or today
+            data["end_date"] = data.pop("end_date") or (today + timedelta(days=30))
+            campaign = Campaign(brand_id=brand.id, **data)
+            db.add(campaign)
+            db.flush()
+            for pname in platform_names_list:
+                platform = platforms_by_name.get(pname)
+                if platform:
+                    db.add(CampaignPlatform(campaign_id=campaign.id, platform_id=platform.id))
         db.commit()
 
-        print(f"✅ Seeded {len(campaigns)} campaigns under brand '{brand.company_name}'.")
+        print(f"[OK] Seeded {len(CAMPAIGN_DEFINITIONS)} campaigns with platforms under brand '{brand.company_name}'.")
 
     except Exception as e:
         db.rollback()
-        print("❌ Error seeding campaigns:", e)
+        print("[ERROR] Error seeding campaigns:", e)
     finally:
         db.close()
 

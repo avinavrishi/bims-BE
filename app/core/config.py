@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     
     # Database Settings
     DATABASE_URL: str = "sqlite:///./brandfluence.db"
+
+    # Admin bootstrap – create default admin on first startup if set in .env
+    ADMIN_BOOTSTRAP_EMAIL: str = ""
+    ADMIN_BOOTSTRAP_PASSWORD: str = ""
     
     # Security Settings
     SECRET_KEY: str = "your-secret-key-change-in-production"
@@ -54,6 +58,17 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     # Frontend URL to redirect after Google login (with tokens in fragment). e.g. http://localhost:3000/auth/callback
     OAUTH_FRONTEND_CALLBACK_URL: str = "http://localhost:3000/auth/callback"
+
+    # Seed data for scripts/campaign_seeds.py (optional; override in .env)
+    SEED_BRAND_EMAIL: str = ""
+    SEED_BRAND_PASSWORD: str = ""
+    SEED_BRAND_COMPANY_NAME: str = "Demo Brand Co"
+    SEED_BRAND_INDUSTRY: str = "Technology"
+    SEED_BRAND_WEBSITE: str = "https://demobrand.example.com"
+
+    SEED_CREATOR_EMAIL: str = ""
+    SEED_CREATOR_PASSWORD: str = ""
+    SEED_CREATOR_DISPLAY_NAME: str = "Demo Creator"
     
     @property
     def cors_origins_list(self) -> List[str]:
