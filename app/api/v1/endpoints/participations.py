@@ -12,7 +12,7 @@ from app.api.v1.dependencies import get_current_user
 from app.core.database import get_db
 from app.models.user import User, UserRole
 from app.models.campaign import Campaign, CampaignStatus
-from app.models.profile import Creator
+from app.models.profile import Creator, CreatorType
 from app.models.social import (
     CampaignParticipation,
     CampaignParticipationStatus,
@@ -28,6 +28,8 @@ from app.schemas.participation import (
     ContentSubmissionResponse,
     ContentSubmissionWithDetails,
     ContentSubmissionUpdate,
+    SubmitLinkCreate,
+    SubmitLinkResponse,
 )
 
 router = APIRouter()
@@ -63,9 +65,14 @@ async def apply_to_campaign(
     db: Session = Depends(get_db),
 ):
     """
-    Apply to participate in a campaign.
-    Creator can apply to any active campaign.
+    Apply to participate in a campaign (face creators only).
+    Faceless creators should use POST /creator/submit-link instead.
     """
+    if creator.creator_type != CreatorType.FACE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apply to Campaign is only for face creators. Faceless creators should use Submit Link.",
+        )
     # Check if campaign exists and is active
     campaign = db.query(Campaign).filter(Campaign.id == participation_data.campaign_id).first()
     if not campaign:
@@ -153,6 +160,148 @@ async def apply_to_campaign(
     )
     
     return new_participation
+
+
+@router.post(
+    "/submit-link",
+    response_model=SubmitLinkResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_link_faceless(
+    data: SubmitLinkCreate,
+    creator: Creator = Depends(get_current_creator),
+    db: Session = Depends(get_db),
+):
+    """
+    Faceless creators only: submit a content link directly (no apply step).
+    Creates an approved participation and a content submission in one call.
+    Face creators must use "Apply to Campaign" instead.
+    """
+    if creator.creator_type != CreatorType.FACELESS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Submit Link is only for faceless creators. Face creators should use Apply to Campaign.",
+        )
+    campaign = db.query(Campaign).filter(Campaign.id == data.campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+    if campaign.status != CampaignStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Campaign is not active. Only active campaigns accept link submissions.",
+        )
+    today = date.today()
+    if campaign.end_date < today:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Campaign has ended")
+    if campaign.start_date > today:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Campaign has not started yet")
+
+    social_account = db.query(SocialAccount).filter(
+        and_(
+            SocialAccount.id == data.social_account_id,
+            SocialAccount.creator_id == creator.id,
+        )
+    ).first()
+    if not social_account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Social account not found or does not belong to you",
+        )
+
+    existing_participation = db.query(CampaignParticipation).filter(
+        and_(
+            CampaignParticipation.campaign_id == data.campaign_id,
+            CampaignParticipation.creator_id == creator.id,
+        )
+    ).first()
+    if existing_participation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You have already participated in this campaign. Use content submission to add more links.",
+        )
+
+    if campaign.max_submissions_per_account:
+        existing_count = db.query(ContentSubmission).filter(
+            and_(
+                ContentSubmission.campaign_id == data.campaign_id,
+                ContentSubmission.social_account_id == data.social_account_id,
+            )
+        ).count()
+        if existing_count >= campaign.max_submissions_per_account:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Maximum submissions limit ({campaign.max_submissions_per_account}) reached for this account",
+            )
+
+    existing_submission = db.query(ContentSubmission).filter(
+        and_(
+            ContentSubmission.campaign_id == data.campaign_id,
+            ContentSubmission.content_url == data.content_url,
+            ContentSubmission.creator_id == creator.id,
+        )
+    ).first()
+    if existing_submission:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This content URL has already been submitted for this campaign",
+        )
+
+    new_participation = CampaignParticipation(
+        campaign_id=data.campaign_id,
+        creator_id=creator.id,
+        status=CampaignParticipationStatus.APPROVED,
+    )
+    db.add(new_participation)
+    db.flush()
+
+    new_submission = ContentSubmission(
+        campaign_id=data.campaign_id,
+        creator_id=creator.id,
+        social_account_id=data.social_account_id,
+        content_url=data.content_url,
+        platform_content_id=data.platform_content_id,
+        status=ContentSubmissionStatus.PENDING,
+    )
+    db.add(new_submission)
+    new_participation.total_submissions = 1
+    db.commit()
+    db.refresh(new_participation)
+    db.refresh(new_submission)
+
+    from app.core.notifications import (
+        notify_brand_content_submitted,
+        notify_admin_content_submitted,
+    )
+    from app.models.profile import Profile
+    from app.models.brand import Brand
+
+    profile = db.query(Profile).filter(Profile.user_id == creator.user_id).first()
+    creator_username = profile.display_name if profile else "Creator"
+    brand = db.query(Brand).filter(Brand.id == campaign.brand_id).first()
+    if brand:
+        brand_user = db.query(User).filter(User.id == brand.user_id).first()
+        if brand_user:
+            notify_brand_content_submitted(
+                db=db,
+                brand_id=brand_user.id,
+                campaign_id=campaign.id,
+                campaign_title=campaign.title,
+                creator_username=creator_username,
+                content_url=data.content_url,
+            )
+    notify_admin_content_submitted(
+        db=db,
+        campaign_id=campaign.id,
+        campaign_title=campaign.title,
+        creator_username=creator_username,
+        content_url=data.content_url,
+    )
+
+    return SubmitLinkResponse(
+        participation_id=new_participation.id,
+        submission_id=new_submission.id,
+        message="Link submitted. Your submission is under review.",
+    )
 
 
 @router.get(

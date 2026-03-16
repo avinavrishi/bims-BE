@@ -65,9 +65,9 @@ def init_db():
     # Create all tables (only creates if they don't exist)
     Base.metadata.create_all(bind=engine)
 
-    # Bootstrap default admin user only if ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD are set in .env
-    admin_email = os.getenv("ADMIN_BOOTSTRAP_EMAIL", "").strip()
-    admin_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD", "").strip()
+    # Bootstrap default admin user if ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD are set in .env
+    admin_email = (settings.ADMIN_BOOTSTRAP_EMAIL or "").strip()
+    admin_password = (settings.ADMIN_BOOTSTRAP_PASSWORD or "").strip()
 
     db = SessionLocal()
     try:

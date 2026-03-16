@@ -71,3 +71,15 @@ class CreatorTypeResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class UpdateCreatorFaceDetailsRequest(BaseModel):
+    """Update face creator details (profile edit). Only for creators with creator_type FACE. All fields optional."""
+    name: Optional[str] = None
+    category: Optional[str] = None
+    reel_price: Optional[float] = None
+    story_price: Optional[float] = None
+    reel_story_price: Optional[float] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+    language: Optional[str] = None
+
