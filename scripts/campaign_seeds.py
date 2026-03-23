@@ -15,6 +15,8 @@ from app.models.campaign import (
     Campaign,
     CampaignStatus,
     CampaignContentType,
+    CAMPAIGN_TYPE_FACE_CREATOR,
+    CAMPAIGN_TYPE_FACELESS_CREATOR,
 )
 from app.models.brand import Brand
 from app.models.platform import Platform, CampaignPlatform
@@ -133,12 +135,14 @@ def get_or_create_seed_creator(db):
 
 # Campaign definitions: list of (campaign_kwargs, platform_names).
 # platform_names: ["Instagram"], ["YouTube"], ["Instagram", "YouTube"], etc.
+# campaign_type: CAMPAIGN_TYPE_FACE_CREATOR (0) or CAMPAIGN_TYPE_FACELESS_CREATOR (1).
 # Logo URLs are Unsplash images (various themes).
 CAMPAIGN_DEFINITIONS = [
     (
         {
             "title": "BetStrike [GENERAL - VIDEO]",
             "category": "GENERAL",
+            "campaign_type": CAMPAIGN_TYPE_FACE_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Create English short-form videos promoting BetStrike.",
             "total_budget": 2000.0,
@@ -160,6 +164,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "CryptoPlay Reels Campaign",
             "category": "CRYPTO",
+            "campaign_type": CAMPAIGN_TYPE_FACELESS_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Instagram Reels & TikTok videos for CryptoPlay app.",
             "total_budget": 5000.0,
@@ -181,6 +186,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "ShopEase Product Image Campaign",
             "category": "E-COMMERCE",
+            "campaign_type": CAMPAIGN_TYPE_FACE_CREATOR,
             "content_type": CampaignContentType.IMAGE,
             "description": "Post product images showcasing ShopEase deals.",
             "total_budget": 1000.0,
@@ -202,6 +208,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "FitLife Fitness Reels",
             "category": "HEALTH",
+            "campaign_type": CAMPAIGN_TYPE_FACELESS_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Short fitness and workout reels for FitLife app.",
             "total_budget": 3500.0,
@@ -223,6 +230,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "TechGear Unboxing Videos",
             "category": "TECHNOLOGY",
+            "campaign_type": CAMPAIGN_TYPE_FACE_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "YouTube unboxing and review videos for TechGear gadgets.",
             "total_budget": 8000.0,
@@ -244,6 +252,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "StyleHub Fashion Lookbook",
             "category": "FASHION",
+            "campaign_type": CAMPAIGN_TYPE_FACELESS_CREATOR,
             "content_type": CampaignContentType.IMAGE,
             "description": "Instagram and TikTok fashion lookbook images and short clips.",
             "total_budget": 4500.0,
@@ -265,6 +274,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "FreshBite Food Content",
             "category": "FOOD",
+            "campaign_type": CAMPAIGN_TYPE_FACE_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Recipe and food review videos for FreshBite delivery brand.",
             "total_budget": 2800.0,
@@ -286,6 +296,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "Wanderlust Travel Vlogs",
             "category": "TRAVEL",
+            "campaign_type": CAMPAIGN_TYPE_FACELESS_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Travel vlogs and destination videos for Wanderlust tours.",
             "total_budget": 6000.0,
@@ -307,6 +318,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "SportMax Energy Campaign",
             "category": "SPORTS",
+            "campaign_type": CAMPAIGN_TYPE_FACE_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "High-energy sports and athletic content for SportMax brand.",
             "total_budget": 4200.0,
@@ -328,6 +340,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "GlowUp Beauty Tutorials",
             "category": "BEAUTY",
+            "campaign_type": CAMPAIGN_TYPE_FACELESS_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Makeup and skincare tutorials for GlowUp beauty products.",
             "total_budget": 3800.0,
@@ -349,6 +362,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "EduLearn Course Promo",
             "category": "EDUCATION",
+            "campaign_type": CAMPAIGN_TYPE_FACE_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Educational explainer videos promoting EduLearn online courses.",
             "total_budget": 5500.0,
@@ -370,6 +384,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "StreamZone Entertainment",
             "category": "ENTERTAINMENT",
+            "campaign_type": CAMPAIGN_TYPE_FACELESS_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Fun and entertaining short-form content for StreamZone platform.",
             "total_budget": 7200.0,
@@ -391,6 +406,7 @@ CAMPAIGN_DEFINITIONS = [
         {
             "title": "FinanceWise Tips & Insights",
             "category": "FINANCE",
+            "campaign_type": CAMPAIGN_TYPE_FACE_CREATOR,
             "content_type": CampaignContentType.VIDEO,
             "description": "Finance tips and investment insights for FinanceWise app.",
             "total_budget": 4000.0,

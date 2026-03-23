@@ -11,7 +11,12 @@ from sqlalchemy import and_
 from app.api.v1.dependencies import get_current_user
 from app.core.database import get_db
 from app.models.user import User, UserRole
-from app.models.campaign import Campaign, CampaignStatus
+from app.models.campaign import (
+    Campaign,
+    CampaignStatus,
+    CAMPAIGN_TYPE_FACE_CREATOR,
+    CAMPAIGN_TYPE_FACELESS_CREATOR,
+)
 from app.models.profile import Creator, CreatorType
 from app.models.social import (
     CampaignParticipation,
@@ -80,13 +85,19 @@ async def apply_to_campaign(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Campaign not found"
         )
-    
+
+    if campaign.campaign_type != CAMPAIGN_TYPE_FACE_CREATOR:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This campaign is for faceless creators only. Use Submit Link instead.",
+        )
+
     if campaign.status != CampaignStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Campaign is not active. Only active campaigns can be joined."
         )
-    
+
     # Check if campaign is still accepting applications (date check)
     today = date.today()
     if campaign.end_date < today:
@@ -185,6 +196,11 @@ async def submit_link_faceless(
     campaign = db.query(Campaign).filter(Campaign.id == data.campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+    if campaign.campaign_type != CAMPAIGN_TYPE_FACELESS_CREATOR:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This campaign is for face creators only. Use Apply to Campaign instead.",
+        )
     if campaign.status != CampaignStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -401,7 +417,18 @@ async def submit_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Campaign not found"
         )
-    
+
+    if campaign.campaign_type == CAMPAIGN_TYPE_FACE_CREATOR and creator.creator_type != CreatorType.FACE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This campaign is for face creators only.",
+        )
+    if campaign.campaign_type == CAMPAIGN_TYPE_FACELESS_CREATOR and creator.creator_type != CreatorType.FACELESS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This campaign is for faceless creators only.",
+        )
+
     # Check if social account exists and belongs to creator
     social_account = db.query(SocialAccount).filter(
         and_(

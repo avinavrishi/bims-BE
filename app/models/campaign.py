@@ -26,6 +26,11 @@ class CampaignContentType(str, PyEnum):
     IMAGE = "IMAGE"
 
 
+# campaign_type (Integer): who the campaign is for
+CAMPAIGN_TYPE_FACE_CREATOR = 0
+CAMPAIGN_TYPE_FACELESS_CREATOR = 1
+
+
 class Campaign(Base):
     __tablename__ = "campaigns"
 
@@ -34,6 +39,8 @@ class Campaign(Base):
 
     title = Column(String, nullable=False)
     category = Column(String, nullable=True)
+    # 0 = face-creator campaign, 1 = faceless-creator campaign
+    campaign_type = Column(Integer, nullable=False, default=CAMPAIGN_TYPE_FACE_CREATOR)
     content_type = Column(Enum(CampaignContentType, name="campaign_content_type"), nullable=False)
     description = Column(Text, nullable=True)
 

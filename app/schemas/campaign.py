@@ -1,7 +1,7 @@
 """
 Campaign Schemas aligned with UML.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, date
 from typing import Optional, List
 from app.models.campaign import CampaignStatus, CampaignContentType
@@ -16,6 +16,8 @@ class PlatformBrief(BaseModel):
 class CampaignBase(BaseModel):
     title: str
     category: Optional[str] = None
+    # 0 = face creator campaign, 1 = faceless creator campaign
+    campaign_type: int = Field(..., ge=0, le=1)
     content_type: CampaignContentType
     description: Optional[str] = None
     total_budget: float
@@ -39,6 +41,7 @@ class CampaignCreate(CampaignBase):
 class CampaignUpdate(BaseModel):
     title: Optional[str] = None
     category: Optional[str] = None
+    campaign_type: Optional[int] = Field(None, ge=0, le=1)
     content_type: Optional[CampaignContentType] = None
     description: Optional[str] = None
     total_budget: Optional[float] = None

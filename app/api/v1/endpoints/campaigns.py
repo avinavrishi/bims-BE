@@ -73,6 +73,7 @@ def _campaign_to_response(
         "brand_id": campaign.brand_id,
         "title": campaign.title,
         "category": campaign.category,
+        "campaign_type": campaign.campaign_type,
         "content_type": campaign.content_type,
         "description": campaign.description,
         "total_budget": campaign.total_budget,
